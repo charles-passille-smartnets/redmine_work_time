@@ -54,7 +54,8 @@ class WorkTimeController < ApplicationController
       redirect_to @link_params
     end
 
-    
+
+    csv_data = %Q|"user","project","ticket","spent time"\n|
     #-------------------------------------- メンバーのループ
     @members.each do |mem_info|
       user = mem_info[1]
