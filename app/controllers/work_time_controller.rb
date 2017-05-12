@@ -55,7 +55,16 @@ class WorkTimeController < ApplicationController
     end
 
 
-    csv_data = %Q|"user","project","ticket","spent time"\n|
+    find_project
+    authorize
+    prepare_values
+    change_member_position
+    change_ticket_position
+    change_project_position
+    member_add_del_check
+    calc_total
+
+    csv_data = %Q|"user","relayed project","relayed ticket","project","ticket","spent time"\n|
     #-------------------------------------- メンバーのループ
     @members.each do |mem_info|
       user = mem_info[1]
@@ -67,30 +76,34 @@ class WorkTimeController < ApplicationController
       prjs.each do |po|
         dsp_prj = po.dsp_prj
         dsp_pos = po.dsp_pos
-        next unless @r_prj_cost.key?(dsp_prj) # 値の無いプロジェクトはパス
-        next unless @r_prj_cost[dsp_prj].key?(-1) # 値の無いプロジェクトはパス
-        next if @r_prj_cost[dsp_prj][-1] == 0 # 値の無いプロジェクトはスパ
+        next unless @prj_cost.key?(dsp_prj) # 値の無いプロジェクトはパス
+        next unless @prj_cost[dsp_prj].key?(-1) # 値の無いプロジェクトはパス
+        next if @prj_cost[dsp_prj][-1] == 0 # 値の無いプロジェクトはスパ
         prj =Project.find_by_id(dsp_prj)
 
         #-------------------------------------- チケットのループ
         tickets = WtTicketRelay.order("position").all
         tickets.each do |tic|
           issue_id = tic.issue_id
-          next unless @r_issue_cost.key?(issue_id) # 値の無いチケットはパス
-          next unless @r_issue_cost[issue_id].key?(-1) # 値の無いチケットはパス
-          next if @r_issue_cost[issue_id][-1] == 0 # 値の無いチケットはパス
-          next unless @r_issue_cost[issue_id].key?(user.id) # 値の無いチケットはパス
-          next if @r_issue_cost[issue_id][user.id] == 0 # 値の無いチケットはパス
+          next unless @issue_cost.key?(issue_id) # 値の無いチケットはパス
+          next unless @issue_cost[issue_id].key?(-1) # 値の無いチケットはパス
+          next if @issue_cost[issue_id][-1] == 0 # 値の無いチケットはパス
+          next unless @issue_cost[issue_id].key?(user.id) # 値の無いチケットはパス
+          next if @issue_cost[issue_id][user.id] == 0 # 値の無いチケットはパス
 
           issue = Issue.find_by_id(issue_id)
           next if issue.nil? # チケットが削除されていたらパス
           next if issue.project_id != dsp_prj # このプロジェクトに表示するチケットでない場合はパス
 
-          csv_data << %Q|"#{user}","#{prj}","##{issue.id} #{issue.subject}",#{@r_issue_cost[issue_id][user.id]}\n|
+          parent_issue = Issue.find_by_id(@issue_parent[issue_id])
+          next if parent_issue.nil? # チケットが削除されていたらパス
+
+          csv_data << %Q|"#{user}","#{parent_issue.project}","##{parent_issue.id} #{parent_issue.subject}",|
+          csv_data << %Q|"#{prj}","##{issue.id} #{issue.subject}",#{@issue_cost[issue_id][user.id]}\n|
         end
       end
-      if @r_issue_cost.has_key?(-1) && @r_issue_cost[-1].has_key?(user.id) then
-        csv_data << %Q|"#{user}","private","private",#{@r_issue_cost[-1][user.id]}\n|
+      if @issue_cost.has_key?(-1) && @issue_cost[-1].has_key?(user.id) then
+        csv_data << %Q|"#{user}","private","private","private","private",#{@issue_cost[-1][user.id]}\n|
       end
     end
 
